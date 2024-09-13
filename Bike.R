@@ -41,7 +41,8 @@ ggsave("fourpanel.png", plot = image)
 my_lm <- linear_reg() %>% # type of model
   set_engine("lm") %>% # set default R function
   set_mode("regression") %>% # require quantitative response
-  fit(formula=log(count)~windspeed+humidity+temp+weather+workingday+holiday+season, # transform count
+  fit(formula=log(count)~    # log transform count
+        windspeed+humidity+temp+weather+workingday+holiday+season, 
       data=train) 
 
 # Generate Predictions
@@ -50,6 +51,7 @@ bike_preds <- predict(my_lm,
 predictions <- exp(bike_preds) # untransform
 predictions
 
+# format to Kaggle
 kaggle_submission <- predictions %>%
   bind_cols(., test) %>% # bind predictions with test data
   select(datetime, .pred) %>% # keep only datetime and prediction variables
@@ -57,13 +59,27 @@ kaggle_submission <- predictions %>%
   mutate(count=pmax(0,count)) %>% # take only positive inputs
   mutate(datetime=as.character(format(datetime))) # proper Kaggle format for dates
 
-
 vroom_write(kaggle_submission,"./bikePredictions.csv", delim = ",")
 
 
-# Calculate MSE
-#sum(averages(bike_preds)-bike_preds)**2
+# Poisson Regression ------------------------------------------------------
+library(poissonreg)
 
+my_pois_model <- poisson_reg(engine="glm") %>%
+  set_mode("regression") %>%
+  fit(formula=count~windspeed+humidity+temp+weather+workingday+holiday+season,
+      data=train)
 
-# Format to Kaggle, which will compute RMSLE
+predictions <-  predict(my_pois_model,
+                          new_data=test)
+predictions
+
+pois_kaggle_submission <- predictions %>%
+  bind_cols(., test) %>% # bind predictions with test data
+  select(datetime, .pred) %>% # keep only datetime and prediction variables
+  rename(count=.pred) %>% # rename .pred
+  mutate(count=pmax(0,count)) %>% # take only positive inputs
+  mutate(datetime=as.character(format(datetime))) # proper Kaggle format for dates
+
+vroom_write(pois_kaggle_submission,"./bikePredictionsPoisson.csv", delim = ",")
 
