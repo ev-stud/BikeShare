@@ -2,6 +2,7 @@ library(tidyverse)
 library(tidymodels)
 library(ggplot2)
 library(patchwork)
+library(vroom)
 
 train <- vroom(file = "BikeShare/train.csv")
 test <- vroom(file = "BikeShare/test.csv")
@@ -31,24 +32,38 @@ plt_casual <- ggplot(data=train, mapping=aes(x=casual, y=count)) +
 
 image <- (plt_weather + plt_temp) / (plt_humid + plt_casual)
 
+# save the plot panel image
 ggsave("fourpanel.png", plot = image)
 
-"update the working directory for next steps"
-cd ./BikeShare
 
-# create Bike.R file in git repository
+# Linear Regression -------------------------------------------------------
 
-"check that the Bike.R file exists for use"
-git status 
+my_lm <- linear_reg() %>% # type of model
+  set_engine("lm") %>% # set default R function
+  set_mode("regression") %>% # require quantitative response
+  fit(formula=log(count)~windspeed+humidity+temp+weather+workingday+holiday+season, # transform count
+      data=train) 
 
-"add the local Bike.R file to online GitHub"
-git add Bike.R
+# Generate Predictions
+bike_preds <- predict(my_lm,
+                      new_data=test)
+predictions <- exp(bike_preds) # untransform
+predictions
 
-"save the filem, with an optional comment"
-git commit -m "I added the Bike.R file"
+kaggle_submission <- predictions %>%
+  bind_cols(., test) %>% # bind predictions with test data
+  select(datetime, .pred) %>% # keep only datetime and prediction variables
+  rename(count=.pred) %>% # rename .pred
+  mutate(count=pmax(0,count)) %>% # take only positive inputs
+  mutate(datetime=as.character(format(datetime))) # proper Kaggle format for dates
 
-"check that our local job is complete, and online repo is ready for next step"
-git status
 
-"complete the sync process"
-git push
+vroom_write(kaggle_submission,"./bikePredictions.csv", delim = ",")
+
+
+# Calculate MSE
+#sum(averages(bike_preds)-bike_preds)**2
+
+
+# Format to Kaggle, which will compute RMSLE
+
